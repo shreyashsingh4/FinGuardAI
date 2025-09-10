@@ -1,0 +1,357 @@
+## FinGuardAI - Risk Behavior Analysis Dataset
+import pandas as pd
+
+# Load the uploaded Excel file
+df = pd.read_excel('FinGuardAI_dataset.xlsx')
+
+# Preview the dataset
+df.head()
+
+
+## Data Preprocessing
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+
+# Copy of the original dataset
+data = df.copy()
+
+# Encode the target variable (risk_label)
+label_encoder = LabelEncoder()
+data['risk_label_encoded'] = label_encoder.fit_transform(data['risk_label'])
+
+# Features (X) and Target (y)
+X = data.drop(columns=['customer_id', 'risk_label', 'risk_label_encoded'])
+y = data['risk_label_encoded']
+
+# Feature Scaling
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+# Train-test split
+X_train, X_test, y_train, y_test = train_test_split(
+    X_scaled, y, test_size=0.2, random_state=42, stratify=y
+)
+
+## Models Evaluation By Training Logistic Regression & Random Forest
+#  Imports (ensure these are run first)
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report, confusion_matrix, ConfusionMatrixDisplay
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+#  Train Logistic Regression
+lr_model = LogisticRegression(max_iter=1000)
+lr_model.fit(X_train, y_train)
+y_pred_lr = lr_model.predict(X_test)
+
+#  Train Random Forest
+rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
+rf_model.fit(X_train, y_train)
+y_pred_rf = rf_model.predict(X_test)
+
+#  Label decoding (risk_label → Low, Medium, High)
+labels = label_encoder.classes_
+
+#  Show reports
+print("Logistic Regression Report:")
+print(classification_report(y_test, y_pred_lr, target_names=labels))
+
+print("Random Forest Report:")
+print(classification_report(y_test, y_pred_rf, target_names=labels))
+
+#  Confusion Matrix for Random Forest
+plt.figure(figsize=(6, 4))
+disp = ConfusionMatrixDisplay.from_estimator(rf_model, X_test, y_test, display_labels=labels)
+plt.title("Random Forest - Confusion Matrix")
+plt.grid(False)
+plt.show()
+
+## Training the SVM Model
+from sklearn.svm import SVC
+
+# Train the SVM model
+svm_model = SVC(kernel='rbf', C=1.0, gamma='scale', random_state=42)
+svm_model.fit(X_train, y_train)
+
+# Predict
+y_pred_svm = svm_model.predict(X_test)
+
+
+## Accuracy, Precision, Recall, F1-Score
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+
+# Evaluate SVM model
+accuracy = accuracy_score(y_test, y_pred_svm)
+precision = precision_score(y_test, y_pred_svm, average='weighted')
+recall = recall_score(y_test, y_pred_svm, average='weighted')
+f1 = f1_score(y_test, y_pred_svm, average='weighted')
+
+# Print scores
+print(f"Accuracy: {accuracy:.4f}")
+print(f"Precision: {precision:.4f}")
+print(f"Recall: {recall:.4f}")
+print(f"F1 Score: {f1:.4f}")
+
+## Full Classification Report and Confusion Matrix
+from sklearn.metrics import classification_report, ConfusionMatrixDisplay
+
+# Detailed report
+print("SVM Classification Report:")
+print(classification_report(y_test, y_pred_svm, target_names=labels))
+
+# Confusion Matrix
+import matplotlib.pyplot as plt
+
+plt.figure(figsize=(6, 4))
+disp = ConfusionMatrixDisplay.from_estimator(svm_model, X_test, y_test, display_labels=labels)
+plt.title("SVM - Confusion Matrix")
+plt.grid(False)
+plt.show()
+
+## Import Required Libraries
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.utils import to_categorical
+
+## One-hot Encode Target
+# Convert y_train and y_test to categorical (3 classes: 0, 1, 2)
+y_train_cat = to_categorical(y_train, num_classes=3)
+y_test_cat = to_categorical(y_test, num_classes=3)
+
+## Build ANN Model
+# Define ANN model
+ann_model = Sequential([
+    Dense(64, input_dim=X_train.shape[1], activation='relu'),
+    Dense(32, activation='relu'),
+    Dense(3, activation='softmax')  # Output layer (3 classes)
+])
+
+# Compile
+ann_model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+# Train
+history = ann_model.fit(X_train, y_train_cat, epochs=20, batch_size=32, validation_split=0.1, verbose=1)
+
+
+## Evaluate ANN Model
+# Evaluate on test data
+loss, accuracy = ann_model.evaluate(X_test, y_test_cat)
+print(f"🎯 ANN Test Accuracy: {accuracy:.4f}")
+
+## Synthetic Time Series for LSTM
+import numpy as np
+import pandas as pd
+
+# Use same customer_ids and risk labels
+customer_ids = df['customer_id'].tolist()
+risk_labels = df['risk_label'].tolist()
+
+# Simulate 6 months of behavior per customer
+timesteps = 6
+sequence_data = []
+
+for cust_id, risk in zip(customer_ids, risk_labels):
+    for month in range(timesteps):
+        row = {
+            'customer_id': cust_id,
+            'month': month,
+            'monthly_spending': np.random.randint(1000, 50000),
+            'monthly_transactions': np.random.randint(5, 50),
+            'missed_emi_flag': np.random.choice([0, 1], p=[0.85, 0.15]),
+            'complaints_flag': np.random.choice([0, 1], p=[0.9, 0.1]),
+            'risk_label': risk
+        }
+        sequence_data.append(row)
+
+# Create DataFrame
+df_seq = pd.DataFrame(sequence_data)
+df_seq.head()
+
+## Prepare Data for LSTM Input Format
+from sklearn.preprocessing import LabelEncoder
+from tensorflow.keras.utils import to_categorical
+from sklearn.model_selection import train_test_split
+
+# Encode target label
+label_encoder = LabelEncoder()
+df_seq['risk_label_encoded'] = label_encoder.fit_transform(df_seq['risk_label'])
+
+# Pivot to shape: (num_customers, timesteps, features)
+features = ['monthly_spending', 'monthly_transactions', 'missed_emi_flag', 'complaints_flag']
+X = df_seq.groupby('customer_id')[features].apply(lambda x: x.values).tolist()
+X = np.array(X)  # shape: (5000, 6, 4)
+
+# Get one label per customer (they're the same for all 6 rows)
+y = df_seq.groupby('customer_id')['risk_label_encoded'].first().values
+y_cat = to_categorical(y, num_classes=3)
+
+# Train-test split
+X_train, X_test, y_train, y_test = train_test_split(X, y_cat, test_size=0.2, random_state=42, stratify=y)
+
+## Build & Train LSTM Model
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+
+# Build LSTM
+model_lstm = Sequential([
+    LSTM(64, input_shape=(timesteps, len(features))),
+    Dropout(0.2),
+    Dense(32, activation='relu'),
+    Dense(3, activation='softmax')  # 3 risk classes
+])
+
+# Compile
+model_lstm.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+# Train
+history_lstm = model_lstm.fit(X_train, y_train, epochs=15, batch_size=32, validation_split=0.1, verbose=1)
+
+loss_lstm, acc_lstm = model_lstm.evaluate(X_test, y_test)
+print(f"🎯 LSTM Test Accuracy: {acc_lstm:.4f}")
+
+from sklearn.preprocessing import StandardScaler
+
+# Drop identifiers and labels
+X_unsup = df.drop(columns=['customer_id', 'risk_label'])
+
+# Standardize features
+scaler = StandardScaler()
+X_scaled_unsup = scaler.fit_transform(X_unsup)
+
+from sklearn.decomposition import PCA
+
+# Reduce to 2 components for plotting
+pca = PCA(n_components=2)
+X_pca = pca.fit_transform(X_scaled_unsup)
+
+print(f"Explained Variance Ratio: {pca.explained_variance_ratio_}")
+
+from sklearn.cluster import KMeans
+
+# Choose number of clusters (e.g., 3)
+kmeans = KMeans(n_clusters=3, random_state=42)
+clusters = kmeans.fit_predict(X_pca)
+
+# Add cluster info to DataFrame
+df_clustered = df.copy()
+df_clustered['cluster'] = clusters
+
+
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# PCA scatter plot colored by cluster
+plt.figure(figsize=(8, 6))
+sns.scatterplot(x=X_pca[:, 0], y=X_pca[:, 1], hue=clusters, palette='Set2', s=40)
+plt.title("K-Means Clustering of Customers (PCA 2D)")
+plt.xlabel("PCA Component 1")
+plt.ylabel("PCA Component 2")
+plt.legend(title="Cluster")
+plt.grid(True)
+plt.show()
+
+import pandas as pd
+pd.crosstab(df_clustered['risk_label'], df_clustered['cluster'], rownames=['Actual Risk'], colnames=['Cluster'])
+
+print(df.columns.tolist())
+
+# Get all feature names except ID and risk_label
+feature_names = df.drop(columns=['customer_id', 'risk_label']).columns.tolist()
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import LabelEncoder, StandardScaler
+
+# Step 1: Prepare original data
+X = df.drop(columns=['customer_id', 'risk_label'])
+y = df['risk_label']
+
+# Step 2: Encode target
+le = LabelEncoder()
+y_encoded = le.fit_transform(y)
+labels = le.classes_
+
+# Step 3: Scale features
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
+# Step 4: Split for Random Forest again
+X_train_rf, X_test_rf, y_train_rf, y_test_rf = train_test_split(X_scaled, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded)
+
+# Step 5: Recreate column names
+feature_names = X.columns
+
+import shap
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# If needed: reconstruct test DataFrame
+X_test_df = pd.DataFrame(X_test_rf, columns=feature_names)
+
+# SHAP explainer
+explainer = shap.TreeExplainer(rf_model)
+
+# Compute SHAP values (will return a single array for binary classification)
+shap_values = explainer.shap_values(X_test_df)
+
+# Check shape (this is key for correct plotting)
+print("SHAP values shape:", np.array(shap_values).shape)
+
+
+# If it's a list (multi-class), pick the right class
+if isinstance(shap_values, list):
+    print("Multiclass classification detected. Showing class 1 (High Risk):")
+    shap.summary_plot(shap_values[1], X_test_df, plot_type="bar")
+
+# If it's binary classification and a 2D array
+elif isinstance(shap_values, np.ndarray):
+    print("Binary classification detected.")
+    shap.summary_plot(shap_values, X_test_df, plot_type="bar")
+
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report
+
+# Initialize the model
+nb_model = GaussianNB()
+
+# Train the model
+nb_model.fit(X_train_rf, y_train_rf)
+
+# Predict on test set
+y_pred_nb = nb_model.predict(X_test_rf)
+
+
+# Accuracy
+acc_nb = accuracy_score(y_test_rf, y_pred_nb)
+prec_nb = precision_score(y_test_rf, y_pred_nb, average='weighted')
+recall_nb = recall_score(y_test_rf, y_pred_nb, average='weighted')
+f1_nb = f1_score(y_test_rf, y_pred_nb, average='weighted')
+
+# Print Results
+print("📊 Naive Bayes Performance:")
+print(f"✅ Accuracy:  {acc_nb:.4f}")
+print(f"✅ Precision: {prec_nb:.4f}")
+print(f"✅ Recall:    {recall_nb:.4f}")
+print(f"✅ F1 Score:  {f1_nb:.4f}")
+
+# Full classification report
+print("\n📝 Classification Report:")
+print(classification_report(y_test_rf, y_pred_nb, target_names=labels))
+
+
+📊 Naive Bayes Performance:
+✅ Accuracy:  0.9210
+✅ Precision: 0.9210
+✅ Recall:    0.9210
+✅ F1 Score:  0.9210
+
+📝 Classification Report:
+              precision    recall  f1-score   support
+
+         Low       0.92      0.92      0.92       507
+      Medium       0.92      0.92      0.92       493
+
+    accuracy                           0.92      1000
+   macro avg       0.92      0.92      0.92      1000
+weighted avg       0.92      0.92      0.92      1000
